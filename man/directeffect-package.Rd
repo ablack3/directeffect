@@ -11,5 +11,10 @@ Estimates latent direct drug effects from a network of comparative-effect estima
 \author{
 \strong{Maintainer}: Adam Black \email{ablack3@gmail.com}
 
+Authors:
+\itemize{
+  \item Adam Black \email{ablack3@gmail.com}
+}
+
 }
 \keyword{internal}
