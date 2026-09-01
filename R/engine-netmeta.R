@@ -2,7 +2,7 @@
 # interface and object layout lives in this file; nothing outside it may
 # touch a netmeta object except through `engine_fit`.
 
-fit_surface_netmeta <- function(de, reference) {
+fit_surface_netmeta <- function(de, reference, random = TRUE) {
   if (!requireNamespace("netmeta", quietly = TRUE)) {
     stop("The \"netmeta\" engine requires the netmeta package. ",
          "Install it with install.packages(\"netmeta\").", call. = FALSE)
@@ -17,7 +17,7 @@ fit_surface_netmeta <- function(de, reference) {
     studlab = comparisons$study_id,
     sm = de$effect_measure,
     common = TRUE,
-    random = TRUE,
+    random = random,
     reference.group = reference
   )
 

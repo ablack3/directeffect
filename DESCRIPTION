@@ -14,7 +14,6 @@ Description: Estimates latent direct drug effects from a network of
 License: Apache License (>= 2)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
 Imports:
     grid,
     igraph,
@@ -33,3 +32,4 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 LazyData: true
+Config/roxygen2/version: 8.0.0
