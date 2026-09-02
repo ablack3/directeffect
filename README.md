@@ -147,6 +147,12 @@ anchoring), `engine`. Stan fits append `median`, `mean`, `sd`, `q025`,
   two independent engines.
 - `vignette("validating-the-surface")` — edge residuals, cycle
   consistency, and simulation-based recovery.
+- `vignette("pooling-vs-surface")` — `fit_surface()` against the
+  simpler bootstrap/meta-analytic pooling alternatives, on the example
+  data and in simulation.
+- `vignette("debiasing-the-surface")` — `debias_surface()`: correcting
+  a network-propagated, shared confound with a negative-control panel,
+  not just per-edge calibration.
 
 ## Status
 

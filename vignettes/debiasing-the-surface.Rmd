@@ -1,0 +1,160 @@
+---
+title: "Debiasing the surface with negative controls"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Debiasing the surface with negative controls}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+has_engine <- requireNamespace("netmeta", quietly = TRUE)
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 6, fig.height = 4,
+  eval = has_engine
+)
+```
+
+Comparative estimates can be confounded — by indication, by unmeasured
+severity, by whatever a negative-control panel is meant to detect. The
+standard fix is empirical calibration: for each comparison, fit a null
+distribution from a panel of outcomes with no plausible causal
+relationship to the exposures, and use it to widen or shift that one
+comparison's interval. That is a *per-edge* correction. `debias_surface()`
+does something different, and the two are not interchangeable.
+
+## What per-edge calibration misses
+
+`fit_surface()` pools comparisons by inverse variance. If a drug's own
+comparisons are biased in the same direction across several edges —
+plausible whenever the bias comes from something about the drug itself
+(its indication, its typical patient mix) rather than from any one
+trial — inverse-variance pooling cannot tell that apart from genuine
+precision. Several biased edges agreeing with each other look, to the
+pooling step, exactly like several unbiased edges agreeing with each
+other: the surface gets *more* confident, not less, about the wrong
+number.
+
+`debias_surface()` corrects this at the network level instead of the
+edge level. Fit the surface twice on the same comparisons: once for the
+outcome of interest, once with every edge's `estimate`/`std_error`
+replaced by its own negative-control panel's summary (mean and SE of
+the panel's log effect — a quantity whose true value is 0 for every
+drug by construction). Whatever nonzero position a drug gets on that
+second surface is its network-propagated systematic bias. Subtract it.
+
+## A worked example
+
+Four drugs, `A` fixed as reference, plus a fifth (`E`) that matters for
+a reason covered below. `C` is compared cleanly to `A` and `B`. `D` is
+compared to all three of `A`, `B`, and `C` — and every one of those
+three comparisons happens to share a **+0.3** bias, say from something
+common to how `D`'s trials were run:
+
+```{r setup-data}
+library(directeffect)
+
+comparisons <- data.frame(
+  study_id   = c("S1", "S2", "S3", "S4", "S5", "S6", "S7"),
+  target     = c("A",  "A",  "B",  "A",  "B",  "C",  "D"),
+  comparator = c("B",  "C",  "C",  "D",  "D",  "D",  "E"),
+  estimate   = c(0.0, -0.2, -0.2,  0.2,  0.2,  0.4,  0.2),
+  std_error  = rep(0.05, 7)
+)
+
+de  <- direct_effect_network(comparisons, effect_measure = "HR")
+fit <- fit_surface(de, engine = "netmeta")
+fit$effects[, c("drug", "estimate", "std_error", "lower", "upper")]
+```
+
+`D`'s three comparisons corroborate each other perfectly (they were
+generated to), so the surface reports a *tighter* interval for `D` than
+for `C`, which has only two clean comparisons — even though `D`'s point
+estimate is the biased one. That is the exact pathology from the
+section above, not a contrived edge case: nothing here looks wrong
+until you know the truth.
+
+## The bias network
+
+A negative-control panel exists for every comparison except `D`–`E`
+(suppose that trial's panel wasn't run, or didn't clear a minimum
+control count). Each panel's mean log effect stands in for
+`estimate`; `A`, `B`, `C`'s panels are centered at 0, `D`'s three are
+centered at the injected 0.3:
+
+```{r bias-fit}
+bias <- data.frame(
+  study_id   = c("S1", "S2", "S3", "S4", "S5", "S6"),
+  target     = c("A",  "A",  "B",  "A",  "B",  "C"),
+  comparator = c("B",  "C",  "C",  "D",  "D",  "D"),
+  estimate   = c(0.0,  0.0,  0.0,  0.3,  0.3,  0.3),
+  std_error  = rep(0.05, 6)
+)
+
+bias_de  <- direct_effect_network(bias, effect_measure = "HR")
+bias_fit <- fit_surface(bias_de, engine = "netmeta")
+bias_fit$effects[, c("drug", "estimate", "std_error")]
+```
+
+The bias surface recovers what was actually injected: `D` sits at
+`-0.3` (the sign flips because `D` was consistently the *comparator* in
+its biased edges above), everyone else at 0.
+
+## Debiasing
+
+```{r debias}
+debiased <- debias_surface(fit, bias_fit)
+debiased$effects[, c("drug", "estimate", "std_error", "lower", "upper")]
+```
+
+`D`'s estimate moves from the biased `-0.2` back to `0.1` — the value
+the comparisons would have shown without the shared confound — and its
+interval *widens* rather than staying artificially tight, because the
+debiased variance correctly adds the bias surface's own uncertainty
+back in. The false precision from three agreeing-but-biased edges is
+gone.
+
+## Debiasing reaches only as far as the bias network does
+
+`debias_surface()` warns and drops any drug present in `fit` but absent
+from `bias_fit` — here, `E`:
+
+```{r debias-warning}
+collect_warnings <- function(expr) {
+  messages <- character()
+  withCallingHandlers(expr, warning = function(w) {
+    messages <<- c(messages, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  })
+  messages
+}
+collect_warnings(debias_surface(fit, bias_fit))
+```
+
+`E`'s own trial against `D` may be perfectly clean, but `E`'s *surface*
+position is still entangled with `D`'s through the network fit — and
+with no negative-control edge of its own, there is nothing to correct
+it with. Dropping `E` rather than reporting it half-corrected is
+deliberate: a network-propagated bias estimate is only as complete as
+the bias network it was propagated through.
+
+## What debiasing does not fix
+
+The debiased variance is `var(fit) + var(bias_fit)`, which assumes the
+two fits' sampling errors are independent (`independent = FALSE` is not
+yet implemented and errors). In practice the outcome-of-interest fit
+and the negative-control fit usually come from the same cohorts, the
+same design, the same database — correlated error sources this simple
+sum does not capture. The documented consequence is that debiased
+intervals are, if anything, somewhat too narrow, not too wide.
+Debiasing corrects a *point estimate* bias with a network-aware method;
+it is not a substitute for getting the negative-control panel itself
+right.
+
+## Learn more
+
+- `?debias_surface` — the full argument and return-value reference.
+- `vignette("pooling-vs-surface")` — a different correction problem
+  (wrong estimand, not confounding) that `debias_surface()` does not
+  address.
