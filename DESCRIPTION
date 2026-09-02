@@ -1,7 +1,7 @@
 Package: directeffect
 Title: Estimate Latent Direct Drug Effects from Networks of Comparative
     Estimates
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R:
     person("Adam", "Black", , "ablack3@gmail.com", role = c("aut", "cre"))
 Description: Estimates latent direct drug effects from a network of
