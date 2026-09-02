@@ -1,5 +1,6 @@
 ^\.claude$
 ^\.scratch$
+^extras$
 ^CLAUDE\.md$
 ^\.github$
 ^data-raw$
