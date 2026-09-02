@@ -2,6 +2,8 @@
 
 ### All vignettes
 
+- [Debiasing the surface with negative
+  controls](https://ablack3.github.io/directeffect/articles/debiasing-the-surface.md):
 - [Getting started with
   directeffect](https://ablack3.github.io/directeffect/articles/directeffect.md):
 - [How directeffect

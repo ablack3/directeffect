@@ -147,6 +147,16 @@ anchoring), `engine`. Stan fits append `median`, `mean`, `sd`, `q025`,
   — the same surface reconstructed by two independent engines.
 - [`vignette("validating-the-surface")`](https://ablack3.github.io/directeffect/articles/validating-the-surface.md)
   — edge residuals, cycle consistency, and simulation-based recovery.
+- [`vignette("pooling-vs-surface")`](https://ablack3.github.io/directeffect/articles/pooling-vs-surface.md)
+  —
+  [`fit_surface()`](https://ablack3.github.io/directeffect/reference/fit_surface.md)
+  against the simpler bootstrap/meta-analytic pooling alternatives, on
+  the example data and in simulation.
+- [`vignette("debiasing-the-surface")`](https://ablack3.github.io/directeffect/articles/debiasing-the-surface.md)
+  —
+  [`debias_surface()`](https://ablack3.github.io/directeffect/reference/debias_surface.md):
+  correcting a network-propagated, shared confound with a
+  negative-control panel, not just per-edge calibration.
 
 ## Status
 
