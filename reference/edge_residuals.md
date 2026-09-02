@@ -63,8 +63,8 @@ if (requireNamespace("netmeta", quietly = TRUE)) {
 }
 #>   target comparator observed     predicted      residual standardized_residual
 #> 1      A          B      0.0 -8.881784e-15  8.881784e-15          3.076740e-13
-#> 2      A          C      0.4  4.000000e-01 -2.775558e-16         -9.614813e-15
-#> 3      B          C      0.4  4.000000e-01 -9.159340e-15         -3.172888e-13
+#> 2      A          C      0.4  4.000000e-01 -2.220446e-16         -7.691851e-15
+#> 3      B          C      0.4  4.000000e-01 -9.103829e-15         -3.153659e-13
 #>    leverage
 #> 1 0.6666667
 #> 2 0.6666667
