@@ -1,0 +1,201 @@
+# Pooling vs. the surface
+
+If a drug has several comparative trials, the simplest thing to do with
+them is average.
+[`pool_bootstrap()`](https://ablack3.github.io/directeffect/reference/pool_bootstrap.md)
+does exactly that — it is the pooling used in high-throughput
+target-trial emulation (Zang et al., *Nature Communications*
+2023;14:8180): take a drug’s own comparative estimates, average them,
+bootstrap an interval.
+[`pool_meta()`](https://ablack3.github.io/directeffect/reference/pool_meta.md)
+is the same idea done efficiently, weighting each estimate by its
+precision (fixed-effect or DerSimonian–Laird random-effects) instead of
+resampling.
+
+Both are offered here as a deliberate contrast to
+\[[`fit_surface()`](https://ablack3.github.io/directeffect/reference/fit_surface.md)\],
+not as alternative implementations of it, because they answer a
+different question. Pooling asks *“how did this drug fare against the
+comparators it happened to be tested against?”* — every comparator is
+implicitly treated as sitting at position zero.
+[`fit_surface()`](https://ablack3.github.io/directeffect/reference/fit_surface.md)
+asks *“where does this drug sit relative to every other drug?”*, solving
+the whole network at once so a comparator’s own position is estimated
+rather than assumed. Where a drug’s comparator set is not representative
+of the network average, pooling inherits that comparator set’s own
+effects; the surface does not.
+
+## On the example data
+
+[`compare_pooling()`](https://ablack3.github.io/directeffect/reference/compare_pooling.md)
+runs both and reports the gap directly, in `comparator_offset` — the
+evidence-weighted mean surface position of each drug’s own comparators,
+which is what pooling implicitly assumes is zero:
+
+``` r
+
+library(directeffect)
+
+de <- direct_effect_network(
+  example_comparisons,
+  anchors = example_anchors,
+  effect_measure = "HR"
+)
+compare_pooling(de)[, c("drug", "pooled_hr", "surface_hr", "comparator_offset")]
+#>           drug pooled_hr surface_hr comparator_offset
+#> 1 atorvastatin 0.9254846  1.0000000        0.08971392
+#> 2   lovastatin 1.0140985  1.2147292        0.22992882
+#> 3  pravastatin 0.8922181  1.1432789        0.21222501
+#> 4 rosuvastatin 0.9055725  0.9051809        0.01517584
+#> 5  simvastatin 0.8840177  1.0465798        0.18191457
+```
+
+None of the six statins was compared only against drugs sitting exactly
+at the network average, so pooled and surface estimates never agree
+exactly — `log_hr_diff` is that residual. On six drugs and twelve
+comparisons the difference is modest. Whether it stays modest at the
+scale this was built for — dozens of drugs, a real comparator network —
+is a question the example data cannot answer, because with only six
+drugs there is no way to also know which method is *right*. That needs a
+simulation with a controlled, known truth.
+
+## Which one is right? A small simulation
+
+[`simulate_direct_effect_network()`](https://ablack3.github.io/directeffect/reference/simulate_direct_effect_network.md)
+generates a network with a known generating truth. Fit every method,
+score each against that truth, and average over many replications:
+
+``` r
+
+set.seed(20260902)
+n_rep <- 20
+
+run_one <- function(rep_id) {
+  sim <- simulate_direct_effect_network(
+    n_drugs = 12, n_comparisons = 35, n_anchors = 0,
+    heterogeneity = 0.05, seed = 1000 + rep_id, effect_sd = 0.4
+  )
+  de <- sim$network
+  truth <- stats::setNames(sim$truth$theta, sim$truth$drug)
+  ref <- de$treatments[1]
+
+  fit    <- fit_surface(de, engine = "netmeta", reference = ref)
+  pb_hr  <- pool_bootstrap(de, R = 200, seed = rep_id, scale = "hr")
+  pb_log <- pool_bootstrap(de, R = 200, seed = rep_id, scale = "log")
+  pm_fix <- pool_meta(de, method = "fixed")
+  pm_ran <- pool_meta(de, method = "random")
+
+  # Every estimator scored on the same footing: effect relative to the
+  # reference drug, which is what `truth` is measured in. That is what the
+  # surface already estimates; the pooled estimators estimate something
+  # else (drug minus its own comparators) and that gap is left
+  # uncorrected, not patched, because it is the thing under test.
+  theta_rel <- truth - truth[ref]
+  grab <- function(df, est_col, lo, hi) {
+    data.frame(drug = df$drug, est = log(df[[est_col]]),
+               lo = log(df[[lo]]), hi = log(df[[hi]]))
+  }
+  pieces <- list(
+    surface  = data.frame(drug = fit$effects$drug, est = fit$effects$estimate,
+                           lo = fit$effects$lower, hi = fit$effects$upper),
+    boot_hr  = grab(pb_hr,  "pooled_hr", "ci_lower", "ci_upper"),
+    boot_log = grab(pb_log, "pooled_hr", "ci_lower", "ci_upper"),
+    meta_fix = grab(pm_fix, "pooled_hr", "ci_lower", "ci_upper"),
+    meta_ran = grab(pm_ran, "pooled_hr", "ci_lower", "ci_upper")
+  )
+  do.call(rbind, lapply(names(pieces), function(m) {
+    x <- pieces[[m]]
+    x$truth  <- unname(theta_rel[x$drug])
+    x$method <- m
+    x[is.finite(x$est) & is.finite(x$truth), , drop = FALSE]
+  }))
+}
+
+all <- do.call(rbind, lapply(seq_len(n_rep), run_one))
+all$err     <- all$est - all$truth
+all$covered <- all$truth >= all$lo & all$truth <= all$hi
+
+small_summary <- do.call(rbind, lapply(split(all, all$method), function(d) {
+  data.frame(method = d$method[1], n = nrow(d),
+             bias = mean(d$err), rmse = sqrt(mean(d$err^2)),
+             coverage95 = mean(d$covered))
+}))
+small_summary[order(small_summary$rmse), ]
+#>            method   n         bias       rmse coverage95
+#> surface   surface 240 -0.003564074 0.06993999  0.9041667
+#> meta_ran meta_ran 236 -0.009250714 0.47119423  0.6271186
+#> boot_log boot_log 236 -0.009688080 0.47125588  0.4491525
+#> boot_hr   boot_hr 236  0.038774672 0.47760467  0.4576271
+#> meta_fix meta_fix 236 -0.015088459 0.49617648  0.2288136
+```
+
+Even at this small scale — 12 drugs, 20 replications, run live inside
+this vignette — the surface’s RMSE is well below every pooling method’s,
+and its coverage sits far closer to the nominal 95% than any of them.
+
+## At the scale this was built for
+
+The question this package actually needed answered was at the scale of a
+real drug-repurposing sweep, not a 12-drug toy: 25 drugs, 150
+comparisons, 200 replications, both engines. That run takes several
+minutes, too long for a vignette to execute on every build, so its code
+lives at `extras/pooling-simulation/run_pooling_simulation.R` — a
+self-contained, runnable script, not a summary of one. Reproduce it
+directly with:
+
+``` r
+Rscript extras/pooling-simulation/run_pooling_simulation.R
+```
+
+Its saved results:
+
+``` r
+
+full_summary <- data.frame(
+  method     = c("surface", "meta_ran", "boot_log", "boot_hr", "meta_fix"),
+  bias       = c(-0.001, -0.005, -0.005,  0.063, -0.004),
+  rmse       = c( 0.047,  0.415,  0.415,  0.421,  0.425),
+  coverage95 = c( 0.871,  0.555,  0.494,  0.497,  0.157)
+)
+full_summary
+#>     method   bias  rmse coverage95
+#> 1  surface -0.001 0.047      0.871
+#> 2 meta_ran -0.005 0.415      0.555
+#> 3 boot_log -0.005 0.415      0.494
+#> 4  boot_hr  0.063 0.421      0.497
+#> 5 meta_fix -0.004 0.425      0.157
+```
+
+The pattern from the small live run holds, sharper: the surface’s RMSE
+(`0.047`) is roughly a ninth of every pooling method’s (`0.42`–`0.43`),
+and its coverage (`87%`) is the only one within reach of the nominal 95%
+— every pooling method, including the precision-weighted meta-analytic
+ones, badly *undercovers* (as low as `16%` for fixed-effect
+meta-analysis). Weighting by precision fixes efficiency; it does nothing
+about the estimand mismatch that pooling and meta-analysis share, so
+their intervals are confidently wrong about the wrong quantity.
+
+## The hazard-ratio Jensen gap
+
+One number in that table is not about the network at all. `boot_hr` and
+`boot_log` differ only in what scale they average on — hazard ratios (as
+Zang et al. did it) or log hazard ratios (the scale the estimates are
+actually symmetric on) — yet `boot_hr` carries a real `+0.063` log-HR
+bias that `boot_log` does not. Averaging ratios instead of log ratios is
+a Jensen’s-inequality gap, not noise: `run_pooling_comparison.R` in the
+same `extras/` folder checks whether this shows up at the size theory
+predicts on a real 3,300-comparison corpus, not just in simulation (see
+that script for the real-data numbers; its own inputs are private study
+data and are not part of this package).
+
+## Bottom line
+
+Pooling and meta-analysis are not wrong on their own terms — they
+correctly answer “how did this drug do against what it happened to be
+compared with.” They are wrong as an answer to “where does this drug sit
+relative to every other drug,” which is the question a repurposing sweep
+actually needs answered, and the gap is not small once weighted by
+precision but still ignoring the network’s shape.
+\[[`fit_surface()`](https://ablack3.github.io/directeffect/reference/fit_surface.md)\]
+costs more to run than an average; on the evidence here, in a connected
+network, the cost is worth it.
