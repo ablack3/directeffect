@@ -30,9 +30,17 @@ jobs:
 
       - name: Test coverage
         run: |
+          # See R-CMD-check.yaml's coverage job for why these are excluded:
+          # stanc-generated from inst/stan/*.stan at install time, not hand-written.
+          generated <- c(
+            "src/RcppExports.cpp",
+            "src/stanExports_surface.cc", "src/stanExports_surface.h",
+            "src/stanExports_anchored_surface.cc", "src/stanExports_anchored_surface.h"
+          )
           cov <- covr::package_coverage(
             quiet = FALSE,
             clean = FALSE,
+            line_exclusions = as.list(generated),
             install_path = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"), winslash = "/"), "package")
           )
           covr::to_cobertura(cov)

@@ -54,7 +54,17 @@ jobs:
 
       - name: Enforce the coverage floor
         run: |
-          cov <- covr::package_coverage(type = "tests", quiet = FALSE)
+          # src/*.cc and src/*.h are stanc-generated from inst/stan/*.stan by
+          # rstantools at install time -- not hand-written, and their unused
+          # Stan-generated branches (alternate log_prob/gradient paths our own
+          # sampling calls never take) aren't ours to hold to this floor.
+          generated <- c(
+            "src/RcppExports.cpp",
+            "src/stanExports_surface.cc", "src/stanExports_surface.h",
+            "src/stanExports_anchored_surface.cc", "src/stanExports_anchored_surface.h"
+          )
+          cov <- covr::package_coverage(type = "tests", quiet = FALSE,
+                                        line_exclusions = as.list(generated))
           print(cov)
           pct <- covr::percent_coverage(cov)
           cat(sprintf("Total coverage: %.2f%%\n", pct))
