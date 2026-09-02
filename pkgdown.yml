@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  directeffect: directeffect.html
+  how-it-works: how-it-works.html
+  netmeta-vs-stan: netmeta-vs-stan.html
+  validating-the-surface: validating-the-surface.html
+last_built: 2026-09-02T12:57Z
+urls:
+  reference: https://ablack3.github.io/directeffect/reference
+  article: https://ablack3.github.io/directeffect/articles
