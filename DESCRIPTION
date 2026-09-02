@@ -23,6 +23,7 @@ Imports:
     stats
 Suggests:
     BH,
+    covr,
     ggplot2,
     ggraph,
     knitr,

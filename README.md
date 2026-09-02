@@ -2,6 +2,7 @@
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/ablack3033/directeffect/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ablack3033/directeffect/actions/workflows/R-CMD-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/ablack3/directeffect/graph/badge.svg)](https://codecov.io/gh/ablack3/directeffect)
 <!-- badges: end -->
 
 ## What it is
