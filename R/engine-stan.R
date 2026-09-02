@@ -4,26 +4,16 @@
 # cmdstanr because it is installable as a self-contained package (no
 # CmdStan toolchain download at setup time), which keeps CI and offline
 # installation simple.
-
-# Compiled Stan models, cached per session so repeated fits pay the
-# compilation cost once.
-stan_models <- new.env(parent = emptyenv())
-
+#
+# Both models are compiled once, ahead of time, at package install (via
+# rstantools -- see R/stanmodels.R, src/Makevars, configure): `stanmodels$name`
+# is already a ready-to-sample `stanmodel` object, not a JIT compile.
 compiled_stan_model <- function(name) {
-  if (is.null(stan_models[[name]])) {
-    path <- system.file("stan", paste0(name, ".stan"),
-                        package = "directeffect")
-    stan_models[[name]] <- rstan::stan_model(file = path)
-  }
-  stan_models[[name]]
+  stanmodels[[name]]
 }
 
 fit_surface_stan <- function(de, reference, chains = 4, iter = 2000,
                              seed = NULL, refresh = 0, ...) {
-  if (!requireNamespace("rstan", quietly = TRUE)) {
-    stop("The \"stan\" engine requires the rstan package. ",
-         "Install it with install.packages(\"rstan\").", call. = FALSE)
-  }
   refuse_multiarm_stan(de$comparisons)
 
   # The Stan program fixes theta[1] = 0, so order drugs with the chosen

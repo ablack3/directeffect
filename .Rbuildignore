@@ -1,12 +1,15 @@
 ^\.claude$
 ^\.scratch$
 ^extras$
+^private$
 ^CLAUDE\.md$
 ^\.github$
 ^data-raw$
 ^_pkgdown\.yml$
 ^pkgdown$
 ^docs$
+^src/RcppExports\.cpp$
+^src/stanExports_.*$
 ^skills-lock\.json$
 ^.*\.Rproj$
 ^\.Rproj\.user$
