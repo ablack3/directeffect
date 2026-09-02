@@ -4,6 +4,9 @@
 ^CLAUDE\.md$
 ^\.github$
 ^data-raw$
+^_pkgdown\.yml$
+^pkgdown$
+^docs$
 ^skills-lock\.json$
 ^.*\.Rproj$
 ^\.Rproj\.user$

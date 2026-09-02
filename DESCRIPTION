@@ -12,6 +12,8 @@ Description: Estimates latent direct drug effects from a network of
     interface, together with diagnostics for network coherence and
     identifiability.
 License: Apache License (>= 2)
+URL: https://ablack3.github.io/directeffect/, https://github.com/ablack3/directeffect
+BugReports: https://github.com/ablack3/directeffect/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
@@ -25,6 +27,7 @@ Suggests:
     ggraph,
     knitr,
     netmeta,
+    pkgdown,
     RcppEigen,
     rmarkdown,
     rstan,

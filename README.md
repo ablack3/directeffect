@@ -1,4 +1,4 @@
-# directeffect
+# directeffect <img src="man/figures/logo.svg" align="right" height="139" alt="" />
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/ablack3033/directeffect/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ablack3033/directeffect/actions/workflows/R-CMD-check.yaml)
