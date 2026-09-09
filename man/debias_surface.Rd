@@ -4,7 +4,12 @@
 \alias{debias_surface}
 \title{Debias a fitted surface using a network-level bias estimate}
 \usage{
-debias_surface(fit, bias_fit, independent = TRUE)
+debias_surface(
+  fit,
+  bias_fit,
+  independent = TRUE,
+  shrink = c("none", "zero", "mean")
+)
 }
 \arguments{
 \item{fit}{A \code{directeffect_fit} for the outcome of interest, from
@@ -26,13 +31,55 @@ currently no general way to estimate the covariance between two
 independently-fit surfaces, so that understatement is a known limitation,
 not something this function corrects for. \code{independent = FALSE} is not
 yet implemented and errors.}
+
+\item{shrink}{Shrink \code{bias_fit}'s per-drug estimates toward a common target
+before subtracting, rather than taking each at face value. \code{"none"}
+(default) subtracts \code{bias_fit} as-is. \code{"zero"} and \code{"mean"} both apply
+DerSimonian--Laird empirical-Bayes shrinkage — the same between-group
+variance estimator \code{\link[=pool_meta]{pool_meta()}} uses for \code{method = "random"}, but here
+estimated \emph{across drugs'} bias estimates rather than across one drug's
+trials: drug \code{i}'s raw bias estimate is pulled toward the target by
+\code{tau2 / (tau2 + se_i^2)}, where \code{tau2} is the between-drug variance of
+true bias estimated by the method of moments. A drug with a large,
+imprecise network-propagated bias estimate (few or weak negative
+controls, reached mostly through connectivity rather than direct
+evidence) gets pulled hard toward the target; a drug with a precise one
+is barely moved. This is not automatic goodness — it is a real judgment
+call about what negative controls are telling you on average:
+\itemize{
+\item \code{"zero"} shrinks toward 0, i.e. assumes negative controls should show
+no systematic bias for a typical drug, so any nonzero panel-wide
+signal is itself noise to shrink away.
+\item \code{"mean"} shrinks toward the precision-weighted grand mean of all
+drugs' bias estimates, i.e. assumes some shared baseline bias (a
+database- or design-level effect common to every drug) is real and
+expected, and only \emph{deviations} from that baseline are drug-specific
+signal worth keeping.
+}
+
+\code{bias_fit}'s own pinned reference drug (\code{estimate}/\code{std_error} fixed at
+exactly 0 by \code{\link[=fit_surface]{fit_surface()}}'s normalization, not measured) carries no
+information about between-drug bias variance and is excluded from
+estimating \code{tau2}; it is given weight 1 (trusted exactly, never pulled)
+rather than divide by its zero variance. Requires at least 2 \emph{other}
+drugs in common between \code{fit} and \code{bias_fit} -- \code{tau2} is not estimable
+from fewer, and this errors rather than silently treat \code{tau2} as 0
+(which would force full shrinkage on every other drug for no real
+reason). The shrunk bias covariance uses \code{Cov[i, j] * sqrt(w_i * w_j)}
+(\code{w} the shrinkage weights above) as a simple, diagonal-consistent
+scaling; like \code{independent}, this does not account for the extra
+estimation uncertainty in \code{tau2} and the target themselves, so treat
+shrunk intervals as an approximation, not an exact posterior.}
 }
 \value{
 A \code{directeffect_fit} restricted to the drugs \code{fit} and \code{bias_fit}
 have in common (a warning names any dropped), with \code{estimate} equal to
-\code{fit}'s estimate minus \code{bias_fit}'s estimate per drug and \code{covariance}
-equal to the (assumed-independent) sum. \verb{$bias_fit} on the result carries
-the bias surface used, for provenance.
+\code{fit}'s estimate minus \code{bias_fit}'s (optionally shrunk) estimate per drug
+and \code{covariance} equal to the (assumed-independent) sum. \verb{$bias_fit} on
+the result carries the original, unshrunk bias surface, for provenance.
+When \code{shrink != "none"}, \verb{$shrinkage} additionally carries a list with
+\code{method}, \code{tau2}, \code{target}, and \code{weight} (the per-drug shrinkage weights,
+named by drug).
 }
 \description{
 Per-edge calibration (e.g. empirical calibration against a negative-control
@@ -74,5 +121,11 @@ if (requireNamespace("netmeta", quietly = TRUE)) {
   bias_fit <- fit_surface(direct_effect_network(bias), engine = "netmeta")
   debiased <- debias_surface(fit, bias_fit)
   debiased$effects
+
+  # Shrink bias estimates toward 0 before subtracting, rather than trusting
+  # each drug's raw network-propagated bias estimate at face value.
+  shrunk <- debias_surface(fit, bias_fit, shrink = "zero")
+  shrunk$effects
+  shrunk$shrinkage
 }
 }

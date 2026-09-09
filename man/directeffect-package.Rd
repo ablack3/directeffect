@@ -6,7 +6,18 @@
 \alias{directeffect-package}
 \title{directeffect: Estimate Latent Direct Drug Effects from Networks of Comparative Estimates}
 \description{
+\if{html}{\figure{logo.svg}{options: style='float: right' alt='logo' width='120'}}
+
 Estimates latent direct drug effects from a network of comparative-effect estimates. Comparative estimates identify only differences between drugs (the effect surface); absolute placebo anchors position that surface against the placebo-defined sea level. Provides frequentist and Bayesian estimation engines behind a single interface, together with diagnostics for network coherence and identifiability.
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://ablack3.github.io/directeffect/}
+  \item \url{https://github.com/ablack3/directeffect}
+  \item Report bugs at \url{https://github.com/ablack3/directeffect/issues}
+}
+
 }
 \author{
 \strong{Maintainer}: Adam Black \email{ablack3@gmail.com}
