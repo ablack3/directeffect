@@ -55,7 +55,7 @@ fit <- fit_surface(de, engine = "netmeta")
 fit$effects[, c("drug", "estimate", "std_error", "lower", "upper")]
 #>   drug      estimate  std_error       lower       upper
 #> 1    A  0.000000e+00 0.00000000  0.00000000  0.00000000
-#> 2    B -2.220446e-15 0.03535534 -0.06929519  0.06929519
+#> 2    B  6.661338e-15 0.03535534 -0.06929519  0.06929519
 #> 3    C  2.000000e-01 0.03535534  0.13070481  0.26929519
 #> 4    D -2.000000e-01 0.03535534 -0.26929519 -0.13070481
 #> 5    E -4.000000e-01 0.06123724 -0.52002279 -0.27997721
@@ -89,11 +89,11 @@ bias <- data.frame(
 bias_de  <- direct_effect_network(bias, effect_measure = "HR")
 bias_fit <- fit_surface(bias_de, engine = "netmeta")
 bias_fit$effects[, c("drug", "estimate", "std_error")]
-#>   drug estimate  std_error
-#> 1    A      0.0 0.00000000
-#> 2    B      0.0 0.03535534
-#> 3    C      0.0 0.03535534
-#> 4    D     -0.3 0.03535534
+#>   drug      estimate  std_error
+#> 1    A  0.000000e+00 0.00000000
+#> 2    B  1.332268e-14 0.03535534
+#> 3    C  6.661338e-15 0.03535534
+#> 4    D -3.000000e-01 0.03535534
 ```
 
 The bias surface recovers what was actually injected: `D` sits at `-0.3`
@@ -110,7 +110,7 @@ debiased <- debias_surface(fit, bias_fit)
 debiased$effects[, c("drug", "estimate", "std_error", "lower", "upper")]
 #>   drug      estimate std_error        lower     upper
 #> 1    A  0.000000e+00      0.00  0.000000000 0.0000000
-#> 2    B -2.220446e-15      0.05 -0.097998199 0.0979982
+#> 2    B -6.661338e-15      0.05 -0.097998199 0.0979982
 #> 3    C  2.000000e-01      0.05  0.102001801 0.2979982
 #> 4    D  1.000000e-01      0.05  0.002001801 0.1979982
 ```
@@ -120,6 +120,94 @@ the comparisons would have shown without the shared confound — and its
 interval *widens* rather than staying artificially tight, because the
 debiased variance correctly adds the bias surface’s own uncertainty back
 in. The false precision from three agreeing-but-biased edges is gone.
+
+## Shrinking the bias estimate
+
+[`debias_surface()`](https://ablack3.github.io/directeffect/reference/debias_surface.md)
+above subtracted `D`’s network-propagated bias estimate (`-0.3`) exactly
+as fit. That estimate came from only three edges — precise enough here
+because they were generated to agree perfectly, but in practice a drug
+reached mostly through connectivity rather than direct negative-control
+evidence can have a bias estimate that is itself noisy. Subtracting a
+noisy estimate at face value can add noise instead of removing bias.
+
+`shrink` pulls each drug’s bias estimate toward a common target before
+subtracting, by DerSimonian–Laird empirical-Bayes shrinkage — the same
+between-group variance estimator `pool_meta(method = "random")` uses,
+but estimated across drugs’ bias estimates here rather than across one
+drug’s trials:
+
+``` r
+
+shrunk <- debias_surface(fit, bias_fit, shrink = "zero")
+#> Warning: 1 of 5 drug(s) in `fit` have no bias estimate in `bias_fit` and are
+#> dropped: E
+shrunk$shrinkage
+#> $method
+#> [1] "zero"
+#> 
+#> $tau2
+#> [1] 0.02875
+#> 
+#> $target
+#> [1] 0
+#> 
+#> $weight
+#>         A         B         C         D 
+#> 1.0000000 0.9583333 0.9583333 0.9583333
+shrunk$effects[, c("drug", "estimate", "std_error")]
+#>   drug      estimate  std_error
+#> 1    A  0.000000e+00 0.00000000
+#> 2    B -6.106227e-15 0.04947643
+#> 3    C  2.000000e-01 0.04947643
+#> 4    D  8.750000e-02 0.04947643
+```
+
+`A` — `bias_fit`’s own pinned reference, fixed at exactly 0 by
+construction rather than measured — gets shrinkage weight 1 (trusted
+exactly, never pulled) and is excluded from estimating `tau2`; dividing
+by its zero variance would otherwise blow up the whole calculation.
+Among the other three drugs, `B` and `C`’s bias estimates already agree
+with 0 and `D`’s disagrees sharply, so the fitted between-drug variance
+is large relative to each drug’s own sampling variance — weights come
+out close to 1, and `D`’s debiased estimate above moves only slightly
+from the unshrunk `debiased` answer, not back toward its still-biased
+raw value.
+
+The real judgment call is the target. `shrink = "zero"` assumes negative
+controls should show no systematic bias for a typical drug.
+`shrink = "mean"` shrinks toward the panel’s own precision-weighted
+grand mean instead — appropriate if some shared baseline bias (a
+database- or design-level effect common to every drug) is expected, and
+only *deviations* from that baseline count as real drug-specific signal:
+
+``` r
+
+shrunk_mean <- debias_surface(fit, bias_fit, shrink = "mean")
+#> Warning: 1 of 5 drug(s) in `fit` have no bias estimate in `bias_fit` and are
+#> dropped: E
+shrunk_mean$shrinkage$target
+#> [1] -0.1
+shrunk_mean$effects[, c("drug", "estimate", "std_error")]
+#>   drug    estimate  std_error
+#> 1    A 0.000000000 0.00000000
+#> 2    B 0.004166667 0.04947643
+#> 3    C 0.204166667 0.04947643
+#> 4    D 0.091666667 0.04947643
+```
+
+The grand mean is pulled negative by `D`’s large bias, so `"mean"`
+treats a small negative bias as the *expected* baseline for every drug,
+not just `D`. `B` and `C`’s debiased estimates tick up slightly relative
+to `"zero"` even though their own negative controls showed no bias at
+all — some of `D`’s problem gets diluted across the whole panel. (`A`,
+the pinned reference, is untouched either way: its shrink weight is
+always 1.) That is the cost of assuming a shared baseline: if the
+panel’s heterogeneity is really just one bad drug rather than a common
+database effect, `"mean"` quietly launders part of `D`’s bias into
+everyone else’s estimate. Neither target is a safe default; which one is
+right depends on what actually generated the panel’s bias, not on which
+fits better.
 
 ## Debiasing reaches only as far as the bias network does
 

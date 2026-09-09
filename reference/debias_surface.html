@@ -62,7 +62,12 @@ narrow surface position instead of cancelling it out.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">debias_surface</span><span class="op">(</span><span class="va">fit</span>, <span class="va">bias_fit</span>, independent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">debias_surface</span><span class="op">(</span></span>
+<span>  <span class="va">fit</span>,</span>
+<span>  <span class="va">bias_fit</span>,</span>
+<span>  independent <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  shrink <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"none"</span>, <span class="st">"zero"</span>, <span class="st">"mean"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -94,14 +99,54 @@ independently-fit surfaces, so that understatement is a known limitation,
 not something this function corrects for. <code>independent = FALSE</code> is not
 yet implemented and errors.</p></dd>
 
+
+<dt id="arg-shrink">shrink<a class="anchor" aria-label="anchor" href="#arg-shrink"></a></dt>
+<dd><p>Shrink <code>bias_fit</code>'s per-drug estimates toward a common target
+before subtracting, rather than taking each at face value. <code>"none"</code>
+(default) subtracts <code>bias_fit</code> as-is. <code>"zero"</code> and <code>"mean"</code> both apply
+DerSimonian–Laird empirical-Bayes shrinkage — the same between-group
+variance estimator <code><a href="pool_meta.html">pool_meta()</a></code> uses for <code>method = "random"</code>, but here
+estimated <em>across drugs'</em> bias estimates rather than across one drug's
+trials: drug <code>i</code>'s raw bias estimate is pulled toward the target by
+<code>tau2 / (tau2 + se_i^2)</code>, where <code>tau2</code> is the between-drug variance of
+true bias estimated by the method of moments. A drug with a large,
+imprecise network-propagated bias estimate (few or weak negative
+controls, reached mostly through connectivity rather than direct
+evidence) gets pulled hard toward the target; a drug with a precise one
+is barely moved. This is not automatic goodness — it is a real judgment
+call about what negative controls are telling you on average:</p><ul><li><p><code>"zero"</code> shrinks toward 0, i.e. assumes negative controls should show
+no systematic bias for a typical drug, so any nonzero panel-wide
+signal is itself noise to shrink away.</p></li>
+<li><p><code>"mean"</code> shrinks toward the precision-weighted grand mean of all
+drugs' bias estimates, i.e. assumes some shared baseline bias (a
+database- or design-level effect common to every drug) is real and
+expected, and only <em>deviations</em> from that baseline are drug-specific
+signal worth keeping.</p></li>
+</ul><p><code>bias_fit</code>'s own pinned reference drug (<code>estimate</code>/<code>std_error</code> fixed at
+exactly 0 by <code><a href="fit_surface.html">fit_surface()</a></code>'s normalization, not measured) carries no
+information about between-drug bias variance and is excluded from
+estimating <code>tau2</code>; it is given weight 1 (trusted exactly, never pulled)
+rather than divide by its zero variance. Requires at least 2 <em>other</em>
+drugs in common between <code>fit</code> and <code>bias_fit</code> – <code>tau2</code> is not estimable
+from fewer, and this errors rather than silently treat <code>tau2</code> as 0
+(which would force full shrinkage on every other drug for no real
+reason). The shrunk bias covariance uses <code>Cov[i, j] * sqrt(w_i * w_j)</code>
+(<code>w</code> the shrinkage weights above) as a simple, diagonal-consistent
+scaling; like <code>independent</code>, this does not account for the extra
+estimation uncertainty in <code>tau2</code> and the target themselves, so treat
+shrunk intervals as an approximation, not an exact posterior.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>directeffect_fit</code> restricted to the drugs <code>fit</code> and <code>bias_fit</code>
 have in common (a warning names any dropped), with <code>estimate</code> equal to
-<code>fit</code>'s estimate minus <code>bias_fit</code>'s estimate per drug and <code>covariance</code>
-equal to the (assumed-independent) sum. <code>$bias_fit</code> on the result carries
-the bias surface used, for provenance.</p>
+<code>fit</code>'s estimate minus <code>bias_fit</code>'s (optionally shrunk) estimate per drug
+and <code>covariance</code> equal to the (assumed-independent) sum. <code>$bias_fit</code> on
+the result carries the original, unshrunk bias surface, for provenance.
+When <code>shrink != "none"</code>, <code>$shrinkage</code> additionally carries a list with
+<code>method</code>, <code>tau2</code>, <code>target</code>, and <code>weight</code> (the per-drug shrinkage weights,
+named by drug).</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -138,11 +183,26 @@ calibration — corrected once, for the whole surface, rather than edge by edge.
 <span class="r-in"><span>  <span class="va">bias_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit_surface.html">fit_surface</a></span><span class="op">(</span><span class="fu"><a href="direct_effect_network.html">direct_effect_network</a></span><span class="op">(</span><span class="va">bias</span><span class="op">)</span>, engine <span class="op">=</span> <span class="st">"netmeta"</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="va">debiased</span> <span class="op">&lt;-</span> <span class="fu">debias_surface</span><span class="op">(</span><span class="va">fit</span>, <span class="va">bias_fit</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="va">debiased</span><span class="op">$</span><span class="va">effects</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># Shrink bias estimates toward 0 before subtracting, rather than trusting</span></span></span>
+<span class="r-in"><span>  <span class="co"># each drug's raw network-propagated bias estimate at face value.</span></span></span>
+<span class="r-in"><span>  <span class="va">shrunk</span> <span class="op">&lt;-</span> <span class="fu">debias_surface</span><span class="op">(</span><span class="va">fit</span>, <span class="va">bias_fit</span>, shrink <span class="op">=</span> <span class="st">"zero"</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="va">shrunk</span><span class="op">$</span><span class="va">effects</span></span></span>
+<span class="r-in"><span>  <span class="va">shrunk</span><span class="op">$</span><span class="va">shrinkage</span></span></span>
 <span class="r-in"><span><span class="op">}</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   drug estimate  std_error      lower      upper scale reference  engine</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1    A      0.0 0.00000000  0.0000000  0.0000000   log         A netmeta</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2    B     -0.5 0.05773503 -0.6131586 -0.3868414   log         A netmeta</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3    C     -0.7 0.05773503 -0.8131586 -0.5868414   log         A netmeta</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $method</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "zero"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $tau2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0.01833333</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $target</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $weight</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         A         B         C </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1.0000000 0.9166667 0.9166667 </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

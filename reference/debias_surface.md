@@ -12,7 +12,12 @@ of cancelling it out.
 ## Usage
 
 ``` r
-debias_surface(fit, bias_fit, independent = TRUE)
+debias_surface(
+  fit,
+  bias_fit,
+  independent = TRUE,
+  shrink = c("none", "zero", "mean")
+)
 ```
 
 ## Arguments
@@ -46,13 +51,61 @@ debias_surface(fit, bias_fit, independent = TRUE)
   limitation, not something this function corrects for.
   `independent = FALSE` is not yet implemented and errors.
 
+- shrink:
+
+  Shrink `bias_fit`'s per-drug estimates toward a common target before
+  subtracting, rather than taking each at face value. `"none"` (default)
+  subtracts `bias_fit` as-is. `"zero"` and `"mean"` both apply
+  DerSimonian–Laird empirical-Bayes shrinkage — the same between-group
+  variance estimator
+  [`pool_meta()`](https://ablack3.github.io/directeffect/reference/pool_meta.md)
+  uses for `method = "random"`, but here estimated *across drugs'* bias
+  estimates rather than across one drug's trials: drug `i`'s raw bias
+  estimate is pulled toward the target by `tau2 / (tau2 + se_i^2)`,
+  where `tau2` is the between-drug variance of true bias estimated by
+  the method of moments. A drug with a large, imprecise
+  network-propagated bias estimate (few or weak negative controls,
+  reached mostly through connectivity rather than direct evidence) gets
+  pulled hard toward the target; a drug with a precise one is barely
+  moved. This is not automatic goodness — it is a real judgment call
+  about what negative controls are telling you on average:
+
+  - `"zero"` shrinks toward 0, i.e. assumes negative controls should
+    show no systematic bias for a typical drug, so any nonzero
+    panel-wide signal is itself noise to shrink away.
+
+  - `"mean"` shrinks toward the precision-weighted grand mean of all
+    drugs' bias estimates, i.e. assumes some shared baseline bias (a
+    database- or design-level effect common to every drug) is real and
+    expected, and only *deviations* from that baseline are drug-specific
+    signal worth keeping.
+
+  `bias_fit`'s own pinned reference drug (`estimate`/`std_error` fixed
+  at exactly 0 by
+  [`fit_surface()`](https://ablack3.github.io/directeffect/reference/fit_surface.md)'s
+  normalization, not measured) carries no information about between-drug
+  bias variance and is excluded from estimating `tau2`; it is given
+  weight 1 (trusted exactly, never pulled) rather than divide by its
+  zero variance. Requires at least 2 *other* drugs in common between
+  `fit` and `bias_fit` – `tau2` is not estimable from fewer, and this
+  errors rather than silently treat `tau2` as 0 (which would force full
+  shrinkage on every other drug for no real reason). The shrunk bias
+  covariance uses `Cov[i, j] * sqrt(w_i * w_j)` (`w` the shrinkage
+  weights above) as a simple, diagonal-consistent scaling; like
+  `independent`, this does not account for the extra estimation
+  uncertainty in `tau2` and the target themselves, so treat shrunk
+  intervals as an approximation, not an exact posterior.
+
 ## Value
 
 A `directeffect_fit` restricted to the drugs `fit` and `bias_fit` have
 in common (a warning names any dropped), with `estimate` equal to
-`fit`'s estimate minus `bias_fit`'s estimate per drug and `covariance`
-equal to the (assumed-independent) sum. `$bias_fit` on the result
-carries the bias surface used, for provenance.
+`fit`'s estimate minus `bias_fit`'s (optionally shrunk) estimate per
+drug and `covariance` equal to the (assumed-independent) sum.
+`$bias_fit` on the result carries the original, unshrunk bias surface,
+for provenance. When `shrink != "none"`, `$shrinkage` additionally
+carries a list with `method`, `tau2`, `target`, and `weight` (the
+per-drug shrinkage weights, named by drug).
 
 ## Details
 
@@ -90,9 +143,24 @@ if (requireNamespace("netmeta", quietly = TRUE)) {
   bias_fit <- fit_surface(direct_effect_network(bias), engine = "netmeta")
   debiased <- debias_surface(fit, bias_fit)
   debiased$effects
+
+  # Shrink bias estimates toward 0 before subtracting, rather than trusting
+  # each drug's raw network-propagated bias estimate at face value.
+  shrunk <- debias_surface(fit, bias_fit, shrink = "zero")
+  shrunk$effects
+  shrunk$shrinkage
 }
-#>   drug estimate  std_error      lower      upper scale reference  engine
-#> 1    A      0.0 0.00000000  0.0000000  0.0000000   log         A netmeta
-#> 2    B     -0.5 0.05773503 -0.6131586 -0.3868414   log         A netmeta
-#> 3    C     -0.7 0.05773503 -0.8131586 -0.5868414   log         A netmeta
+#> $method
+#> [1] "zero"
+#> 
+#> $tau2
+#> [1] 0.01833333
+#> 
+#> $target
+#> [1] 0
+#> 
+#> $weight
+#>         A         B         C 
+#> 1.0000000 0.9166667 0.9166667 
+#> 
 ```
